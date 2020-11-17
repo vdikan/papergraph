@@ -9,7 +9,7 @@
   :components ((:module "src"
                 :components
                 ((:file "main"))))
-  :description "Bibtex -> Graphviz-Dot graph plotter. Using CrossRef to grab refereces."
+  :description "Bibtex -> Graphviz-Dot converter. Using CrossRef to grab references."
   :in-order-to ((test-op (test-op "papergraph/tests"))))
 
 (defsystem "papergraph/tests"
