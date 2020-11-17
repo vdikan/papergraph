@@ -1,0 +1,17 @@
+* Papergraph 
+
+** Usage
+
+** Installation
+
+** Author
+
++ Vladimir Dikan (vdikan@vivaldi.net)
+
+** Copyright
+
+Copyright (c) 2020 Vladimir Dikan (vdikan@vivaldi.net)
+
+** License
+
+Licensed under the MIT License.
