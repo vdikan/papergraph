@@ -1,6 +1,7 @@
 (defpackage papergraph
   (:use :cl :parser-combinators :alexandria :cl-arrows)
-  (:export #:process-entries))
+  (:export #:process-entries
+           #:process-graph))
 (in-package :papergraph)
 
 
@@ -143,7 +144,8 @@ not included."
 (defun append-cites-in-table (records-table)
   "Based on the metadata queried from CrossRef, update the records in RECORDS-TABLE
 by appending '(:CITES ...) to the record assoc list. Rest of '(:CITES ...) contains
-DOI strings that the publication cites and that are also keys in the same RECORDS-TABLE."
+citation hash-tables with :DOI entries that the publication cites and that are also
+keys in the same RECORDS-TABLE."
   (loop
     :for key :being :the hash-keys :of records-table
     :do (let* ((rec (gethash key records-table))
@@ -157,7 +159,7 @@ DOI strings that the publication cites and that are also keys in the same RECORD
                   :for ref :in (gethash "reference" (gethash "message" resp))
                   :do (let ((cite-doi (gethash "DOI" ref)))
                         (if (and cite-doi (gethash cite-doi records-table))
-                            (append-cite-to-rec cite-doi rec)))))))))
+                            (append-cite-to-rec ref rec)))))))))
 
 
 (defun process-entries (bib-file-path)
@@ -168,3 +170,57 @@ updated entries as alists."
    (-> res-table
        (append-cites-in-table))
    res-table))
+
+
+(defun graph-open ()
+  "Output header of the grapviz-dot graph."
+  "digraph PaperGraph {
+graph [truecolor=true, bgcolor=\"#ffffff01\"];
+node [shape=box, style=filled, color=\".7 .3 1.0\"];
+edge [color=\"cyan\"];")
+
+
+(defun append-graph-close (string)
+  (format nil "~a~%}" string))
+
+
+(defun assoc-or-empty (key rec &optional tag)
+  (let ((val (second (assoc key rec))))
+    (if val
+        (if tag (format nil "<~a>~a</~a>"
+                        tag val tag)
+            (format nil "~a" val))
+        (format nil ""))))
+
+
+(defun graph-node-edges (rec)
+  (loop :for reftable :in (rest (assoc :cites rec))
+        :collect (format nil "\"~a\" -> \"~a\" [tooltip=\"~a\"];"
+                         (second (assoc :doi rec))
+                         (gethash "DOI" reftable)
+                         (gethash "key" reftable))))
+
+
+(defun graph-node (rec)
+  (format nil "\"~a\" [label=<(~a) ~a<br/>~a<br/>~a<br/>~a>];~%~{~A~%~}"
+          (assoc-or-empty :doi rec)
+          (assoc-or-empty :year rec)
+          (assoc-or-empty :title rec)
+          (assoc-or-empty :author rec "b")
+          (assoc-or-empty :journal rec "i")
+          (assoc-or-empty :url rec "u")
+          (graph-node-edges rec)))
+
+
+(defun append-graph-nodes (string records-table)
+  (let ((nodes-list
+          (loop :for rec :being :the hash-values of records-table
+                :collect (graph-node rec))))
+    (format nil "~a~%~{~a~%~}" string nodes-list)))
+
+
+(defun process-graph (records-table)
+  "Convert processed BibTex entries from RECORDS-TABLE to a Dot-graph."
+  (-> (graph-open)
+      (append-graph-nodes records-table)
+      (append-graph-close)))
