@@ -1,3 +1,9 @@
+(ql:quickload '(:parser-combinators :alexandria :dexador :jonathan))
+(ql:quickload :cl-arrows)
+(ql:quickload :bt-semaphore)
+(ql:quickload :lparallel)
+
+
 (defpackage papergraph
   (:use :cl :parser-combinators :alexandria :cl-arrows)
   (:export #:process-entries
@@ -141,25 +147,68 @@ not included."
         (nconc rec (list (list :cites cite))))))
 
 
+(defvar cites-lock (bt:make-lock))
+
+(defvar entry-count-lock (bt:make-lock))
+
+(defvar num-api-threads 8)
+
+(lparallel:make-kernel num-api-threads :name "custom-kernel")
+
+;; (setf num-api-threads 6)
+
+
+;; (defun start-api-kernel ()
+;;   (setf lparallel:*kernel*
+;;         (lparallel:make-kernel num-api-threads :name "custom-kernel")))
+
+;; (start-api-kernel)
+
+;; (end-api-kernel)
+
+;; (defun end-api-kernel ()
+;;   (lparallel:end-kernel :wait t))
+
+
 (defun append-cites-in-table (records-table)
   "Based on the metadata queried from CrossRef, update the records in RECORDS-TABLE
 by appending '(:CITES ...) to the record assoc list. Rest of '(:CITES ...) contains
 citation hash-tables with :DOI entries that the publication cites and that are also
 keys in the same RECORDS-TABLE."
-  (loop
-    :for key :being :the hash-keys :of records-table
-    :do (let* ((rec (gethash key records-table))
-               (doi (doi-from-bib rec)))
-          (if doi
-              (let ((resp (jonathan:parse
-                           (dex:get (format nil "https://api.crossref.org/works/~a"
-                                            (doi-from-bib rec)))
-                           :as :hash-table)))
-                (loop
-                  :for ref :in (gethash "reference" (gethash "message" resp))
-                  :do (let ((cite-doi (gethash "DOI" ref)))
-                        (if (and cite-doi (gethash cite-doi records-table))
-                            (append-cite-to-rec ref rec)))))))))
+  ;; (start-api-kernel)                    ; spawn threads knocking on CrossRef
+  (format t "Fetching citations metadata across ~a threads...~%" num-api-threads)
+  (let ((total-count (hash-table-count records-table))
+        (entry-count 0))
+    ;; generate API requests as futures:
+    (loop
+      :for key :being :the hash-keys :of records-table
+      :do (let ((rec (gethash key records-table)))
+            (let ((resp (lparallel:promise)))
+              (lparallel:future
+                (lparallel:fulfill
+                    resp (jonathan:parse
+                          (dex:get (format nil "https://api.crossref.org/works/~a"
+                                           (doi-from-bib rec)))
+                          :as :hash-table))
+                (lparallel:force
+                 (lparallel:future
+                   (bt:with-lock-held (cites-lock) ; blockingly update citations of the entry record being processed
+                     (loop :for ref :in (gethash "reference" (gethash "message" (lparallel:force resp)))
+                           :do (let ((cite-doi (gethash "DOI" ref)))
+                                 (if (and cite-doi (gethash cite-doi records-table))
+                                     (append-cite-to-rec ref rec)))))
+                   ;; blockingly increase number of processed threads
+                   (bt:with-lock-held (entry-count-lock)
+                     (incf entry-count)
+                     (format t "[~a/~a] Fetched citations for entry:  ~a~%"
+                             entry-count total-count (doi-from-bib rec)))
+                   ))))))
+
+    ;; wait till all promises are fulfilled:
+    (loop :until (= total-count entry-count)
+          :do (sleep 0.001)))
+  ;; (lparallel:end-kernel)
+  )
 
 
 (defun process-entries (bib-file-path)
