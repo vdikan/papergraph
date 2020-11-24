@@ -275,6 +275,17 @@ edge [arrowhead=\"vee\", color=\"~a\"];"
         (format nil ""))))
 
 
+(defun graph-node (rec)
+  (format nil "\"~a\" [constraint=false,color=\"~a\",label=<(~a) ~a<br/>~a<br/>~a<br/>~a >];~%"
+          (assoc-or-empty :doi rec)
+          (assoc-or-empty :dot-node-color rec)
+          (assoc-or-empty :year rec)
+          (assoc-or-empty :title rec)
+          (assoc-or-empty :author rec "b")
+          (assoc-or-empty :journal rec "i")
+          (assoc-or-empty :url rec "u")))
+
+
 (defun graph-node-edges (rec)
   (loop :for reftable :in (rest (assoc :cites rec))
         :collect (format nil "\"~a\" -> \"~a\" [tooltip=\"~a\"];"
@@ -283,16 +294,11 @@ edge [arrowhead=\"vee\", color=\"~a\"];"
                          (gethash "key" reftable))))
 
 
-(defun graph-node (rec)
-  (format nil "\"~a\" [constraint=false,color=\"~a\",label=<(~a) ~a<br/>~a<br/>~a<br/>~a >];~%~{~a~%~}"
-          (assoc-or-empty :doi rec)
-          (assoc-or-empty :dot-node-color rec)
-          (assoc-or-empty :year rec)
-          (assoc-or-empty :title rec)
-          (assoc-or-empty :author rec "b")
-          (assoc-or-empty :journal rec "i")
-          (assoc-or-empty :url rec "u")
-          (graph-node-edges rec)))
+(defun append-edges (string records-table)
+  (format nil "~a~%~{~a~}"
+          string
+          (loop :for rec :being :the hash-values :of records-table
+                :collect (format nil "~{~a~%~}" (graph-node-edges rec)))))
 
 
 (defun append-subgraph (string cluster-name records-table)
@@ -323,4 +329,5 @@ edge [arrowhead=\"vee\", color=\"~a\"];"
           :do (setf graph (append-subgraph graph cluster-name records-table)))
     (when (not clusters-only)
       (setf graph (append-unclustered-subgraph graph records-table)))
+    (setf graph (append-edges graph records-table))
     (append-graph-close graph)))
