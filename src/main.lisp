@@ -1,14 +1,16 @@
-(ql:quickload '(:parser-combinators :alexandria :dexador :jonathan))
-(ql:quickload :cl-arrows)
-(ql:quickload :bt-semaphore)
-(ql:quickload :lparallel)
-
-
 (defpackage papergraph
   (:use :cl :parser-combinators :alexandria :cl-arrows)
-  (:export #:process-entries
-           #:process-graph))
+  (:export #:process-entries #:process-graph))
 (in-package :papergraph)
+
+
+(defvar clusters-only nil)
+
+(defvar clusters nil)
+
+(defvar unclustered-color ".7 .3 1.0")
+
+(defvar edge-color "cyan")
 
 
 (def-cached-parser bib-file?
@@ -122,21 +124,55 @@ parsed from the keys of the bib-entries.
   (remove-if #'comment-p (parse-string* (bib-file?) string)))
 
 
+(defun split-keywords-in (rec)
+  "Destructively splits string parsed as :KEYWORDS in REC alist into separate word strings."
+  (setf (assoc-value rec :keywords)
+        (-<> (car (assoc-value rec :keywords))
+             (remove-if (lambda (c) (or (char-equal #\Space c)
+                                        (char-equal #\Tab c))) <>)
+             (uiop:split-string <> :separator '(#\Space #\Tab #\,)))))
+
+
 (defun doi-from-bib (bib-record)
   "Gets a :DOI string out from a parsed bibtex entry"
   (second (assoc :DOI bib-record)))
 
 
+(defun clusters-present-in (rec)
+  "Both predicate and REC updater."
+  (let ((cluster-names (mapcar #'car clusters)))
+    (loop
+      :for name :in cluster-names
+      :when (find name (assoc-value rec :keywords) :test #'string-equal)
+        :do (progn
+              (nconc rec (list (list :dot-node-color
+                                     (getf (assoc-value clusters name) :color))))
+              (nconc rec (list (list :dot-node-cluster name)))
+              (return name)))))
+
+
+(defun append-unclustered (rec)
+  "Both predicate and REC updater."
+  (when (not clusters-only)
+    (nconc rec (list (list :dot-node-color unclustered-color)))))
+
+
 (defun build-records-table (bib-file-path)
   "Reads and parses BibTex file under BIB-FILE-PATH. Then builds the hash table of the records
-where :DOI strings are used as keys. Records with no :DOI in parsed bibtex keys are
-not included."
+where :DOI strings are used as keys. Also modifies :KEYWORDS of the record and appends
+:DOT-NODE-COLOR with color that corresponds to the first found cluster name in keywords
+or with UNCLUSTERED-COLOR (if unclustered nodes are allowed).
+Records with no :DOI in parsed bibtex keys are not included.
+Records with no found cluster name in :KEYWORDS when CLUSTERS-ONLY are not included."
   (let ((parsed-records-table (make-hash-table :test 'equal)))
     (loop
       :for rec :in (parse (uiop:read-file-string bib-file-path))
-      :do (let ((doi (doi-from-bib rec)))
-            (when doi
-              (setf (gethash doi parsed-records-table) rec))))
+      :do (progn
+            (split-keywords-in rec)   ; edit :keywords collection in the record
+            (let ((doi (doi-from-bib rec)))
+              ;; those predicates will also append :dot-node-color to record:
+              (when (and doi (or (clusters-present-in rec) (append-unclustered rec)))
+                (setf (gethash doi parsed-records-table) rec))))) ; put the record into the table
     parsed-records-table))
 
 
@@ -150,24 +186,6 @@ not included."
 (defvar cites-lock (bt:make-lock))
 
 (defvar entry-count-lock (bt:make-lock))
-
-(defvar num-api-threads 8)
-
-(lparallel:make-kernel num-api-threads :name "custom-kernel")
-
-;; (setf num-api-threads 6)
-
-
-;; (defun start-api-kernel ()
-;;   (setf lparallel:*kernel*
-;;         (lparallel:make-kernel num-api-threads :name "custom-kernel")))
-
-;; (start-api-kernel)
-
-;; (end-api-kernel)
-
-;; (defun end-api-kernel ()
-;;   (lparallel:end-kernel :wait t))
 
 
 (defun append-cites-in-table (records-table)
@@ -216,17 +234,32 @@ keys in the same RECORDS-TABLE."
 and quering extra metadata from the web. Keys are DOI strings, values - parsed and
 updated entries as alists."
   (let ((res-table (build-records-table bib-file-path)))
-   (-> res-table
-       (append-cites-in-table))
-   res-table))
+    (-> res-table
+        (append-cites-in-table))
+    res-table))
+
+
+(defun select-for-cluster (name records-table)
+  (loop
+    for v being the hash-values of records-table
+    when (string-equal name (car (assoc-value v :dot-node-cluster)))
+      collect v))
+
+
+(defun select-unclustered (records-table)
+  (loop
+    for v being the hash-values of records-table
+    when (not (assoc-value v :dot-node-cluster))
+      collect v))
 
 
 (defun graph-open ()
   "Output header of the grapviz-dot graph."
-  "digraph PaperGraph {
-graph [truecolor=true, bgcolor=\"#ffffff01\"];
-node [shape=box, style=filled, color=\".7 .3 1.0\"];
-edge [color=\"cyan\"];")
+  (format nil "digraph PaperGraph {
+graph [layout=fdp, truecolor=true, bgcolor=\"#ffffff01\", overlap=false, splines=true];
+node [shape=box, style=filled, color=\"~a\"];
+edge [arrowhead=\"vee\", color=\"~a\"];"
+          unclustered-color edge-color))
 
 
 (defun append-graph-close (string)
@@ -251,8 +284,9 @@ edge [color=\"cyan\"];")
 
 
 (defun graph-node (rec)
-  (format nil "\"~a\" [label=<(~a) ~a<br/>~a<br/>~a<br/>~a>];~%~{~A~%~}"
+  (format nil "\"~a\" [constraint=false,color=\"~a\",label=<(~a) ~a<br/>~a<br/>~a<br/>~a >];~%~{~a~%~}"
           (assoc-or-empty :doi rec)
+          (assoc-or-empty :dot-node-color rec)
           (assoc-or-empty :year rec)
           (assoc-or-empty :title rec)
           (assoc-or-empty :author rec "b")
@@ -261,15 +295,32 @@ edge [color=\"cyan\"];")
           (graph-node-edges rec)))
 
 
-(defun append-graph-nodes (string records-table)
+(defun append-subgraph (string cluster-name records-table)
   (let ((nodes-list
-          (loop :for rec :being :the hash-values of records-table
+          (loop :for rec :in (select-for-cluster cluster-name records-table)
                 :collect (graph-node rec))))
-    (format nil "~a~%~{~a~%~}" string nodes-list)))
+    (format nil "~a~%subgraph cluster_~a {~%label=\"~a\";~%color=\"~a\";~%fontcolor=\"~a\";~%~{~a~%~}}~%"
+            string
+            cluster-name
+            (getf (assoc-value clusters cluster-name :test #'string-equal) :label)
+            (getf (assoc-value clusters cluster-name :test #'string-equal) :color)
+            (getf (assoc-value clusters cluster-name :test #'string-equal) :color)
+            nodes-list)))
+
+
+(defun append-unclustered-subgraph (string records-table)
+  (let ((nodes-list
+          (loop :for rec :in (select-unclustered records-table)
+                :collect (graph-node rec))))
+    (format nil "~a~%~{~a~%~}~%"
+            string nodes-list)))
 
 
 (defun process-graph (records-table)
   "Convert processed BibTex entries from RECORDS-TABLE to a Dot-graph."
-  (-> (graph-open)
-      (append-graph-nodes records-table)
-      (append-graph-close)))
+  (let ((graph (graph-open)))
+    (loop :for cluster-name :in (mapcar #'car clusters)
+          :do (setf graph (append-subgraph graph cluster-name records-table)))
+    (when (not clusters-only)
+      (setf graph (append-unclustered-subgraph graph records-table)))
+    (append-graph-close graph)))

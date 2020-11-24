@@ -1,0 +1,20 @@
+(in-package :papergraph)
+
+(setf clusters '(("md" . (:color ".3 .3 1.0" :label "Molecular Dynamics"))
+                 ("cs" . (:color ".5 .3 1.0" :label "Computer Science"))))
+
+(setf clusters-only t)
+
+(setf unclustered-color ".7 .3 1.0")
+
+(setf edge-color "magenta")
+
+(setf num-api-threads 10)
+
+(setf ref-file "~/Refs/refs.bib")
+
+(setf out-dir #P"/tmp/papergraph/")
+
+(setf out-file "papergraph.dot")
+
+(setf system-img-browser "eom")

@@ -5,7 +5,10 @@
   :depends-on ("parser-combinators"
                "alexandria"
                "dexador"
-               "jonathan")
+               "jonathan"
+               "cl-arrows"
+               "bt-semaphore"
+               "lparallel")
   :components ((:module "src"
                 :components
                 ((:file "main"))))
