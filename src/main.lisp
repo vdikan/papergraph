@@ -170,23 +170,24 @@ parsed from the keys of the bib-entries.
     (nconc rec (list (list :dot-node-color unclustered-color)))))
 
 
-(defun build-records-table (bib-file-path)
-  "Reads and parses BibTex file under BIB-FILE-PATH. Then builds the hash table of the records
+(defun build-records-table (parsed-records-table bib-file-path)
+  "Reads and parses BibTex file under BIB-FILE-PATH. Then appends to the PARSED-RECORDS-TABLE
 where :DOI strings are used as keys. Also modifies :KEYWORDS of the record and appends
 :DOT-NODE-COLOR with color that corresponds to the first found cluster name in keywords
 or with UNCLUSTERED-COLOR (if unclustered nodes are allowed).
 Records with no :DOI in parsed bibtex keys are not included.
 Records with no found cluster name in :KEYWORDS when CLUSTERS-ONLY are not included."
-  (let ((parsed-records-table (make-hash-table :test 'equal)))
-    (loop
-      :for rec :in (parse (uiop:read-file-string bib-file-path))
-      :do (progn
-            (split-keywords-in rec)   ; edit :keywords collection in the record
-            (let ((doi (doi-from-bib rec)))
-              ;; those predicates will also append :dot-node-color to record:
-              (when (and doi (or (clusters-present-in rec) (append-unclustered rec)))
-                (setf (gethash doi parsed-records-table) rec))))) ; put the record into the table
-    parsed-records-table))
+                                        ;(let ((parsed-records-table (make-hash-table :test 'equal)))
+  (loop
+    :for rec :in (parse (uiop:read-file-string bib-file-path))
+    :do (progn
+          (split-keywords-in rec)   ; edit :keywords collection in the record
+          (let ((doi (doi-from-bib rec)))
+            ;; those predicates will also append :dot-node-color to record:
+            (when (and doi (or (clusters-present-in rec) (append-unclustered rec)))
+              (setf (gethash doi parsed-records-table) rec))))) ; put the record into the table
+  parsed-records-table)
+
 
 
 (defun append-cite-to-rec (cite rec)
@@ -242,11 +243,13 @@ keys in the same RECORDS-TABLE."
   )
 
 
-(defun process-entries (bib-file-path)
-  "Return final processed hash table after parsing BibTex file under BIB-FILE-PATH
+(defun process-entries (bib-file-path-list)
+  "Return final processed hash table after parsing BibTex files under BIB-FILE-PATH
 and quering extra metadata from the web. Keys are DOI strings, values - parsed and
 updated entries as alists."
-  (let ((res-table (build-records-table bib-file-path)))
+  (let ((res-table (make-hash-table :test 'equal)))
+    (loop :for bib-file-path :in bib-file-path-list
+          :do (build-records-table res-table (truename bib-file-path)))
     (-> res-table
         (append-cites-in-table))
     res-table))

@@ -11,7 +11,7 @@
 
 (setf num-api-threads 10)
 
-(setf ref-file "~/Refs/refs.bib")
+(setf ref-files '("~/Refs/refs.bib"))
 
 (setf out-dir #P"/tmp/papergraph/")
 
