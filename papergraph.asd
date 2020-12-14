@@ -4,6 +4,7 @@
   :license "MIT"
   :depends-on ("parser-combinators"
                "alexandria"
+               "serapeum"
                "dexador"
                "jonathan"
                "cl-arrows"

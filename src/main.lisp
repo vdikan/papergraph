@@ -13,9 +13,22 @@
 (defvar edge-color "cyan")
 
 
+(defun split-me (str)
+  (uiop:split-string str :separator '(#\Space #\Tab #\,)))
+
+
+(defun clean-me (str)
+  (remove-if (lambda (c) (or (char-equal #\Newline c)
+                             (char-equal #\' c)
+                             (char-equal #\" c)
+                             (char-equal #\\ c)
+                             (char-equal #\{ c)
+                             (char-equal #\} c))) str))
+
+
 (def-cached-parser bib-file?
-  (sepby? (choice (bib-entry?) (bib-comment?))
-          (white?)))
+    (sepby? (choice (bib-entry?) (bib-comment?))
+            (white?)))
 
 
 (def-cached-parser bib-comment?
@@ -130,7 +143,7 @@ parsed from the keys of the bib-entries.
         (-<> (car (assoc-value rec :keywords))
              (remove-if (lambda (c) (or (char-equal #\Space c)
                                         (char-equal #\Tab c))) <>)
-             (uiop:split-string <> :separator '(#\Space #\Tab #\,)))))
+             (split-me <>))))
 
 
 (defun doi-from-bib (bib-record)
@@ -258,7 +271,7 @@ updated entries as alists."
   (format nil "digraph PaperGraph {
 graph [layout=fdp, truecolor=true, bgcolor=\"#ffffff01\", overlap=false, splines=true];
 node [shape=box, style=filled, color=\"~a\"];
-edge [arrowhead=\"vee\", color=\"~a\"];"
+edge [arrowhead=\"vee\", color=\"~a\", penwidth=1.5, arrowsize=1.5];"
           unclustered-color edge-color))
 
 
@@ -276,21 +289,27 @@ edge [arrowhead=\"vee\", color=\"~a\"];"
 
 
 (defun graph-node (rec)
-  (format nil "\"~a\" [constraint=false,color=\"~a\",label=<(~a) ~a<br/>~a<br/>~a<br/>~a >];~%"
+  (format nil "\"~a\" [constraint=false,color=\"~a\",
+label=<(~a) ~{~A <br/>~}~{~A <br/>~}~a<br/>~a >];~%"
           (assoc-or-empty :doi rec)
           (assoc-or-empty :dot-node-color rec)
           (assoc-or-empty :year rec)
-          (assoc-or-empty :title rec)
-          (assoc-or-empty :author rec "b")
+          (mapcar (lambda (l) (format nil "~{~A ~}" l))
+                  (serapeum:batches
+                   (split-me (clean-me (assoc-or-empty :title rec))) 8))
+          (mapcar (lambda (l) (format nil "<b>~{~A ~}</b>" l))
+                  (serapeum:batches
+                   (split-me (clean-me (assoc-or-empty :author rec))) 10))
           (assoc-or-empty :journal rec "i")
           (assoc-or-empty :url rec "u")))
 
 
 (defun graph-node-edges (rec)
   (loop :for reftable :in (rest (assoc :cites rec))
-        :collect (format nil "\"~a\" -> \"~a\" [tooltip=\"~a\"];"
+        :collect (format nil "\"~a\" -> \"~a\" [color=\"~a\", tooltip=\"~a\"];"
                          (second (assoc :doi rec))
                          (gethash "DOI" reftable)
+                         (second (assoc :dot-node-color rec))
                          (gethash "key" reftable))))
 
 
@@ -305,7 +324,8 @@ edge [arrowhead=\"vee\", color=\"~a\"];"
   (let ((nodes-list
           (loop :for rec :in (select-for-cluster cluster-name records-table)
                 :collect (graph-node rec))))
-    (format nil "~a~%subgraph cluster_~a {~%label=\"~a\";~%color=\"~a\";~%fontcolor=\"~a\";~%~{~a~%~}}~%"
+    (format nil "~a~%subgraph cluster_~a
+{~%fontsize=32;~%label=\"~a\";~%color=\"~a\";~%fontcolor=\"~a\";~%~{~a~%~}}~%"
             string
             cluster-name
             (getf (assoc-value clusters cluster-name :test #'string-equal) :label)
