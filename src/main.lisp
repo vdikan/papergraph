@@ -12,6 +12,8 @@
 
 (defvar edge-color "cyan")
 
+(defvar layered-view nil)
+
 
 (defun split-me (str)
   (uiop:split-string str :separator '(#\Space #\Tab #\,)))
@@ -272,9 +274,10 @@ updated entries as alists."
 (defun graph-open ()
   "Output header of the grapviz-dot graph."
   (format nil "digraph PaperGraph {
-graph [layout=fdp, truecolor=true, bgcolor=\"#ffffff01\", overlap=false, splines=true];
+graph [layout=~a, truecolor=true, bgcolor=\"#ffffff01\", overlap=false, splines=true];
 node [shape=box, style=filled, color=\"~a\"];
 edge [arrowhead=\"vee\", color=\"~a\", penwidth=1.5, arrowsize=1.5];"
+          (if layered-view "dot" "fdp")
           unclustered-color edge-color))
 
 

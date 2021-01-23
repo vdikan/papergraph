@@ -3,6 +3,8 @@
 (setf clusters '(("md" . (:color ".3 .3 1.0" :label "Molecular Dynamics"))
                  ("cs" . (:color ".5 .3 1.0" :label "Computer Science"))))
 
+(setf layered-view nil)
+
 (setf clusters-only t)
 
 (setf unclustered-color ".7 .3 1.0")
