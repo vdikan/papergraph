@@ -1,6 +1,15 @@
-* Papergraph 
+* Papergraph
 
 ** Usage
+
+*** Docker
+#+begin_src shell
+  docker pull vdikan/papergraph:latest
+  docker run -it -v "$(pwd):/app" vdikan/papergraph -s  # places documented `papergraphrc.sample` config
+  mv papergraphrc.sample papergraphrc
+  # edit papergraphrc
+  docker run -it -v "$(pwd):/app" vdikan/papergraph  # generate papergraph
+#+end_src
 
 ** Installation
 
