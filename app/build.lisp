@@ -1,4 +1,4 @@
-(ql:quickload :papergraph)
+(asdf:load-system :papergraph)
 
 (in-package :papergraph)
 

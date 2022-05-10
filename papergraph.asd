@@ -7,8 +7,8 @@
                "serapeum"
                "dexador"
                "jonathan"
-               "cl-arrows"
-               "bt-semaphore"
+               "arrows"
+               "bordeaux-threads"
                "lparallel")
   :components ((:module "src"
                 :components

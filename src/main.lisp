@@ -1,5 +1,5 @@
 (defpackage papergraph
-  (:use :cl :parser-combinators :alexandria :cl-arrows)
+  (:use :cl :parser-combinators :alexandria :arrows)
   (:export #:process-entries #:process-graph))
 (in-package :papergraph)
 

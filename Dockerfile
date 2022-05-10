@@ -31,7 +31,7 @@ RUN curl -o /tmp/quicklisp.lisp 'https://beta.quicklisp.org/quicklisp.lisp' && \
     sbcl --noinform --non-interactive --load ~/quicklisp/setup.lisp --eval \
         '(ql-util:without-prompting (ql:add-to-init-file))' && \
     echo '#+quicklisp(push "/src" ql:*local-project-directories*)' >> ~/.sbclrc && \
-    mkdir /src && cd /src && git clone https://github.com/nightfly19/cl-arrows.git && \
+    # mkdir /src && cd /src && git clone https://github.com/nightfly19/cl-arrows.git && \
     rm -f /tmp/quicklisp.lisp
 
 
